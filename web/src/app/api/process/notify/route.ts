@@ -38,6 +38,19 @@ async function handler(req: NextRequest) {
   const rid = req.headers.get("x-request-id") ?? "n/a";
 
   if (action.type === "webhook") {
+    // SSRF guard: only allow outbound HTTPS to prevent internal network access.
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(action.url);
+    } catch {
+      serverLog("warn", "post-process:webhook", "invalid-url", { url: action.url, rid });
+      return NextResponse.json({ ok: true, warning: "Webhook URL is invalid" });
+    }
+    if (parsedUrl.protocol !== "https:") {
+      serverLog("warn", "post-process:webhook", "rejected-non-https", { url: action.url, rid });
+      return NextResponse.json({ ok: true, warning: "Webhook URL must use HTTPS" });
+    }
+
     const payload = {
       event: success ? "publish_success" : "publish_failure",
       video,
