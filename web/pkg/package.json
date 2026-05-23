@@ -1,0 +1,7 @@
+{
+  "name": "video-sync-wasm",
+  "version": "0.1.0",
+  "description": "WASM type stubs for tsc — actual .wasm built by wasm-pack at build time",
+  "types": "video_sync.d.ts",
+  "private": true
+}

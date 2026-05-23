@@ -234,10 +234,22 @@ async function downloadFirefliesToFile(
   }
 
   const t = json.data?.transcript;
-  const videoUrl: string | null = t?.video_url || t?.audio_url || null;
-  if (!videoUrl) {
+  const rawVideoUrl: string | null = t?.video_url || t?.audio_url || null;
+  if (!rawVideoUrl) {
     throw new Error("Fireflies returned no video or audio URL for this transcript. The recording may not be available.");
   }
+
+  // Validate the URL returned by the Fireflies API before fetching it.
+  let parsedVideoUrl: URL;
+  try {
+    parsedVideoUrl = new URL(rawVideoUrl);
+  } catch {
+    throw new Error("Fireflies returned an invalid video URL.");
+  }
+  if (parsedVideoUrl.protocol !== "https:") {
+    throw new Error("Fireflies video URL must use HTTPS.");
+  }
+  const videoUrl = rawVideoUrl;
 
   const dlRes = await fetch(videoUrl);
   if (!dlRes.ok) {
@@ -334,6 +346,21 @@ async function handler(req: NextRequest) {
       if (loomVideoId) {
         await downloadLoomToFile(loomVideoId, tmpPath);
       } else {
+        // SSRF guard: only allow outbound HTTPS for generic URLs.
+        let parsedDownloadUrl: URL;
+        try {
+          parsedDownloadUrl = new URL(downloadUrl);
+        } catch {
+          fs.unlink(tmpPath).catch(() => {});
+          return NextResponse.json({ error: "downloadUrl is not a valid URL" }, { status: 400 });
+        }
+        if (parsedDownloadUrl.protocol !== "https:") {
+          fs.unlink(tmpPath).catch(() => {});
+          return NextResponse.json(
+            { error: "downloadUrl must use the HTTPS scheme" },
+            { status: 400 },
+          );
+        }
         const downloadRes = await fetch(downloadUrl);
         if (!downloadRes.ok) {
           return NextResponse.json(
